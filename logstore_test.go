@@ -9,6 +9,7 @@ import (
 	"github.com/gogo/protobuf/proto"
 	"github.com/golang/glog"
 	"github.com/stretchr/testify/suite"
+	"encoding/json"
 )
 
 func TestLogStore(t *testing.T) {
@@ -182,7 +183,7 @@ func (s *LogstoreTestSuite) TestLogstore() {
 	logstoreName := "github-test"
 	err := s.Project.DeleteLogStore(logstoreName)
 	time.Sleep(5 * 1000 * time.Millisecond)
-	err = s.Project.CreateLogStore(logstoreName, 14, 2) 
+	err = s.Project.CreateLogStore(logstoreName, 14, 2)
 	s.Nil(err)
 	time.Sleep(10 * 1000 * time.Millisecond)
 	err = s.Project.UpdateLogStore(logstoreName, 7, 2)
@@ -200,5 +201,29 @@ func (s *LogstoreTestSuite) TestLogstore() {
 	s.True(len(machineGroups) >= 0)
 	s.Equal(len(machineGroups), machineGroupCount)
 	err = s.Project.DeleteLogStore(logstoreName)
+	s.Nil(err)
+}
+
+func (s *LogstoreTestSuite) TestCreateConsumerGroup() {
+	err := s.Logstore.CreateConsumerGroup("sdktest", 16,true)
+	if err != nil {
+		nErr := &Error{}
+		inErr := &Error{}
+		json.Unmarshal([]byte(err.Error()), nErr)
+		json.Unmarshal([]byte(nErr.Message), inErr)
+		s.Equal("ConsumerGroupAlreadyExist", inErr.Code)
+	} else {
+		s.Nil(err)
+	}
+}
+
+func (s *LogstoreTestSuite) TestHeartBeat() {
+	rshards, err := s.Logstore.HeartBeat("sdktest", "sdktest-1", []int{})
+	s.True(len(rshards) > 0)
+	s.Nil(err)
+}
+
+func (s *LogstoreTestSuite) TestGetCheckpoint() {
+	_, err := s.Logstore.GetCheckpoint("sdktest", 0)
 	s.Nil(err)
 }

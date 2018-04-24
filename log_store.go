@@ -13,6 +13,7 @@ import (
 	"github.com/gogo/protobuf/proto"
 	"github.com/golang/glog"
 	"github.com/pierrec/lz4"
+	"time"
 )
 
 // compress type
@@ -75,6 +76,109 @@ func (s *LogStore) ListShards() (shardIDs []int, err error) {
 		shardIDs = append(shardIDs, v.ShardID)
 	}
 	return shardIDs, nil
+}
+
+func (s *LogStore) CreateConsumerGroup(consumerGroup string, timeout time.Duration, order bool) (err error) {
+	h := map[string]string{
+		"x-log-bodyrawsize": "0",
+		"Content-Type":      "application/json",
+	}
+	b := map[string]interface{}{
+		"consumerGroup": consumerGroup,
+		"timeout": timeout/time.Second,
+		"order": order,
+	}
+	body, err := json.Marshal(b)
+	if err != nil {
+		return NewClientError(err.Error())
+	}
+	uri := fmt.Sprintf("/logstores/%v/consumergroups", s.Name)
+	_, err = request(s.project, "POST", uri, h, body)
+	if err != nil {
+		return NewClientError(err.Error())
+	}
+
+	return nil
+}
+
+func (s *LogStore) HeartBeat(consumerGroup string, consumer string, heartBeatShardIDs []int) (shardIDs []int, err error) {
+	h := map[string]string{
+		"x-log-bodyrawsize": "0",
+		"Content-Type":      "application/json",
+	}
+	body, err := json.Marshal(heartBeatShardIDs)
+	if err != nil {
+		return nil, NewClientError(err.Error())
+	}
+	uri := fmt.Sprintf("/logstores/%v/consumergroups/%v?type=heartbeat&consumer=%v", s.Name, consumerGroup, consumer)
+	r, err := request(s.project, "POST", uri, h, body)
+	if err != nil {
+		return nil, NewClientError(err.Error())
+	}
+	defer r.Body.Close()
+	buf, _ := ioutil.ReadAll(r.Body)
+	if r.StatusCode != http.StatusOK {
+		err := &Error{}
+		json.Unmarshal(buf, err)
+		return nil, err
+	}
+	var shards []*Shard
+	json.Unmarshal(buf, &shards)
+	for _, v := range shards {
+		shardIDs = append(shardIDs, v.ShardID)
+	}
+	return shardIDs, nil
+}
+
+func (s *LogStore) GetCheckpoint(consumerGroup string, shard int) (*string, error) {
+	h := map[string]string{
+		"x-log-bodyrawsize": "0",
+	}
+	uri := fmt.Sprintf("/logstores/%v/consumergroups/%v?shard=%v", s.Name, consumerGroup, shard)
+	r, err := request(s.project, "GET", uri, h, nil)
+	if err != nil {
+		return nil, NewClientError(err.Error())
+	}
+	defer r.Body.Close()
+	buf, _ := ioutil.ReadAll(r.Body)
+	if r.StatusCode != http.StatusOK {
+		err := &Error{}
+		json.Unmarshal(buf, err)
+		return nil, err
+	}
+
+	var checkpoints []struct {
+		shard int
+		checkpoint string
+		updateTime uint64
+		consumer string
+	}
+	json.Unmarshal(buf, &checkpoints)
+	if len(checkpoints) > 0 {
+		return &checkpoints[0].checkpoint, nil
+	}
+	return nil, NewClientError("fail to get shard checkpoint")
+}
+
+func (s *LogStore) UpdateCheckpoint(consumerGroup string, consumer string, shard int, checkpoint string, forceSuccess bool) (err error) {
+	h := map[string]string{
+		"x-log-bodyrawsize": "0",
+		"Content-Type":      "application/json",
+	}
+	b := map[string]interface{}{
+		"shard": shard,
+		"checkpoint": checkpoint,
+	}
+	body, err := json.Marshal(b)
+	if err != nil {
+		return NewClientError(err.Error())
+	}
+	uri := fmt.Sprintf("/logstores/%v/consumergroups/%v?type=checkpoint&consumer=%v&forceSuccess=%v", s.Name, consumerGroup, consumer, forceSuccess)
+	_, err = request(s.project, "POST", uri, h, body)
+	if err != nil {
+		return NewClientError(err.Error())
+	}
+	return nil
 }
 
 func copyIncompressible(src, dst []byte) (int, error) {

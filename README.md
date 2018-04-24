@@ -43,3 +43,7 @@ go get github.com/aliyun/aliyun-log-go-sdk
 ### Create Machine Group for Logtail
 
 [machine_group_sample.go](example/machine_group/machine_group_sample.go)
+
+### Create LogHub Consumer for realtime consumption
+
+[log_dump_consumer.go](example/consumer/log_dump_consumer.go)
