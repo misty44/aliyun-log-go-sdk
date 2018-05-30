@@ -1,7 +1,7 @@
 package consumer
 
 import (
-	"log"
+	log "github.com/sirupsen/logrus"
 	"time"
 	"github.com/bailaohe/aliyun-log-go-sdk"
 	"encoding/json"
@@ -54,7 +54,7 @@ type ShardedConsumerWorker struct {
 }
 
 func (self *ShardedConsumerWorker) consume() {
-	log.Printf("ShardedConsumerWorker start consuming, status = %v", self.status)
+	log.Debugf("ShardedConsumerWorker start consuming, status = %v", self.status)
 
 	taskSuccess := false
 
@@ -96,11 +96,11 @@ func (self *ShardedConsumerWorker) consume() {
 			if self.LastFetchedLogGroup != nil {
 				self.CheckpointTracker.Cursor = self.LastFetchedLogGroup.EndCursor
 				consumingLogList := self.LastFetchedLogGroup.FetchedLogGroupList
-				log.Printf("try processing fetched data, lastFetchedCount = %v", self.LastFetchedCount)
+				log.Debugf("try processing fetched data, lastFetchedCount = %v", self.LastFetchedCount)
 				self.LastFetchedLogGroup = nil
 
 				if self.LastFetchedCount > 0 {
-					log.Println("start processing fetched data ...")
+					log.Debugln("start processing fetched data ...")
 					self.executor.submit(func() TaskResult {
 						return self.executeProcess(consumingLogList)
 					})
@@ -123,13 +123,13 @@ func (self *ShardedConsumerWorker) consume() {
 				} else if self.LastFetchedCount < 1000 {
 					triggerNewFetch = time.Since(self.LastFetchTime) > time.Millisecond*50
 				}
-				log.Printf("try fetching log data ... %v, %v, %v",
+				log.Debugf("try fetching log data ... %v, %v, %v",
 					self.LastFetchedCount,
 					time.Since(self.LastFetchTime)/time.Second,
 					triggerNewFetch)
 
 				if triggerNewFetch {
-					log.Println("start fetching new data ...")
+					log.Debugln("start fetching new data ...")
 					self.LastFetchTime = time.Now()
 					self.executor.submit(self.executeFetch)
 				}
@@ -316,7 +316,7 @@ func (self *ConsumerWorker) cleanShardedWorker(ownedShards []int) {
 	for shard, shardedWorker := range self.shardedWorkers {
 		if _, existed := ownedShardMap[shard]; !existed {
 			shardedWorker.Shutdown()
-			log.Printf("Try to shutdown unsiggned consumer shard: %v", shard)
+			log.Debugf("Try to shutdown unsiggned consumer shard: %v", shard)
 		}
 		if shardedWorker.isShutdown() {
 			remainShards := []int{}
@@ -327,7 +327,7 @@ func (self *ConsumerWorker) cleanShardedWorker(ownedShards []int) {
 				}
 			}
 			removeShards = append(removeShards, shard)
-			log.Printf("Remove an unsigned consumer shard: %v", shard)
+			log.Debugf("Remove an unsigned consumer shard: %v", shard)
 		}
 	}
 
@@ -338,27 +338,28 @@ func (self *ConsumerWorker) cleanShardedWorker(ownedShards []int) {
 
 func (self *ConsumerWorker) Shutdown() {
 	self.shutFlag = true
-	log.Println("ConsumerWorker shutdown")
+	log.Debugln("ConsumerWorker shutdown")
 }
 
 func (self *ConsumerWorker) Startup() {
-	log.Println("ConsumerWorker startup")
+	log.Debugf("ConsumerWorker %s.%s startup\n", self.config.ConsumerGroup, self.config.Consumer)
 	go func(self *ConsumerWorker) {
 		go func(self *ConsumerWorker) {
-			log.Println("ConsumerWorker heartbeat started")
+			log.Debugln("ConsumerWorker %s.%s heartbeat started\n", self.config.ConsumerGroup, self.config.Consumer)
 			for !self.shutFlag {
-				log.Printf("ConsumerWorker heartbeat at %v", time.Now())
+				log.Debugf("ConsumerWorker %s.%s heartbeat at %v\n", self.config.ConsumerGroup, self.config.Consumer, time.Now())
 				newShards, err := self.LogStore.HeartBeat(self.config.ConsumerGroup, self.config.Consumer, self.holdShards)
 
 				if err != nil {
 					log.Fatalf("Heartbeat error: %v", err.Error())
 				} else {
-					self.holdShards = newShards
+					self.holdShards = make([]int, len(newShards))
+					copy(self.holdShards, newShards)
 				}
 
 				time.Sleep(self.config.HeartbeatInterval)
 			}
-			log.Println("ConsumerWorker heartbeat stopped")
+			log.Debugf("ConsumerWorker %s.%s heartbeat stopped\n", self.config.ConsumerGroup, self.config.Consumer)
 		}(self)
 
 		for !self.shutFlag {

@@ -6,6 +6,9 @@ import (
 	"github.com/bailaohe/aliyun-log-go-sdk/consumer"
 	"time"
 	"log"
+	"fmt"
+	"os/signal"
+	"syscall"
 )
 
 type DumpProcessor struct{}
@@ -36,6 +39,15 @@ func (self *DumpProcessor) Shutdown(*consumer.CheckpointTracker) error {
 }
 
 func main() {
+	sc := make(chan os.Signal, 1)
+	signal.Notify(sc,
+		os.Kill,
+		os.Interrupt,
+		syscall.SIGHUP,
+		syscall.SIGINT,
+		syscall.SIGTERM,
+		syscall.SIGQUIT)
+
 	endpoint := os.Getenv("LOG_TEST_ENDPOINT")
 	projectName := os.Getenv("LOG_TEST_PROJECT")
 	logstoreName := os.Getenv("LOG_TEST_LOGSTORE")
@@ -45,15 +57,42 @@ func main() {
 	slsProject, _ := sls.NewLogProject(projectName, endpoint, accessKeyID, accessKeySecret)
 	slsLogstore, _ := slsProject.GetLogStore(logstoreName)
 
-	consumer1, _ := consumer.NewConsumerWorker(slsLogstore, &DumpProcessor{}, &consumer.ConsumerConfig{
-		ConsumerGroup:     "sdktest",
-		Consumer:          "sdktest-1",
-		HeartbeatInterval: 6 * time.Second,
-		DataFetchInterval: time.Second,
-	})
+	shards, err := slsLogstore.ListShards()
+	if err != nil {
+		log.Println(err.Error())
+		return
+	}
 
-	consumer1.Startup()
+	var consumers []*consumer.ConsumerWorker
+	for idx, _ := range shards {
+		consumer, _ := consumer.NewConsumerWorker(slsLogstore,
+			&DumpProcessor{}, &consumer.ConsumerConfig{
+				ConsumerGroup:     "datasync",
+				Consumer:          fmt.Sprintf("datasync-%d", idx),
+				HeartbeatInterval: 6 * time.Second,
+				DataFetchInterval: time.Second,
+			})
+		consumers = append(consumers, consumer)
+	}
 
-	time.Sleep(12*time.Second)
-	consumer1.Shutdown()
+	done := make(chan struct{}, 1)
+	go func() {
+		for _, c := range consumers {
+			go func(w *consumer.ConsumerWorker) {
+				w.Startup()
+			}(c)
+		}
+		done <- struct{}{}
+	}()
+
+
+	select {
+	case n := <-sc:
+		log.Printf("receive signal %v, closing", n)
+	}
+
+	for _, c := range consumers {
+		c.Shutdown()
+	}
+	<-done
 }
