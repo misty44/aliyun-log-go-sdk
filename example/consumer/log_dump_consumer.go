@@ -1,14 +1,15 @@
 package main
 
 import (
-	"os"
-	"github.com/bailaohe/aliyun-log-go-sdk"
-	"github.com/bailaohe/aliyun-log-go-sdk/consumer"
-	"time"
-	"log"
 	"fmt"
+	"log"
+	"os"
 	"os/signal"
 	"syscall"
+	"time"
+
+	"github.com/misty44/aliyun-log-go-sdk"
+	"github.com/misty44/aliyun-log-go-sdk/consumer"
 )
 
 type DumpProcessor struct{}
@@ -84,7 +85,6 @@ func main() {
 		}
 		done <- struct{}{}
 	}()
-
 
 	select {
 	case n := <-sc:

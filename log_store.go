@@ -10,10 +10,11 @@ import (
 	"net/url"
 	"strconv"
 
+	"time"
+
 	"github.com/gogo/protobuf/proto"
 	"github.com/golang/glog"
 	"github.com/pierrec/lz4"
-	"time"
 )
 
 // compress type
@@ -85,8 +86,8 @@ func (s *LogStore) CreateConsumerGroup(consumerGroup string, timeout time.Durati
 	}
 	b := map[string]interface{}{
 		"consumerGroup": consumerGroup,
-		"timeout": timeout/time.Second,
-		"order": order,
+		"timeout":       timeout / time.Second,
+		"order":         order,
 	}
 	body, err := json.Marshal(b)
 	if err != nil {
@@ -122,10 +123,10 @@ func (s *LogStore) HeartBeat(consumerGroup string, consumer string, heartBeatSha
 		json.Unmarshal(buf, err)
 		return nil, err
 	}
-	var shards []*Shard
-	json.Unmarshal(buf, &shards)
-	for _, v := range shards {
-		shardIDs = append(shardIDs, v.ShardID)
+	var aStr []int
+	json.Unmarshal(buf, &aStr)
+	for _, v := range aStr {
+		shardIDs = append(shardIDs, v)
 	}
 	return shardIDs, nil
 }
@@ -148,14 +149,14 @@ func (s *LogStore) GetCheckpoint(consumerGroup string, shard int) (*string, erro
 	}
 
 	var checkpoints []struct {
-		shard int
-		checkpoint string
-		updateTime uint64
-		consumer string
+		Shard      int
+		Checkpoint string
+		UpdateTime uint64
+		Consumer   string
 	}
 	json.Unmarshal(buf, &checkpoints)
 	if len(checkpoints) > 0 {
-		return &checkpoints[0].checkpoint, nil
+		return &checkpoints[0].Checkpoint, nil
 	}
 	return nil, NewClientError("fail to get shard checkpoint")
 }
@@ -166,7 +167,7 @@ func (s *LogStore) UpdateCheckpoint(consumerGroup string, consumer string, shard
 		"Content-Type":      "application/json",
 	}
 	b := map[string]interface{}{
-		"shard": shard,
+		"shard":      shard,
 		"checkpoint": checkpoint,
 	}
 	body, err := json.Marshal(b)
@@ -181,93 +182,93 @@ func (s *LogStore) UpdateCheckpoint(consumerGroup string, consumer string, shard
 	return nil
 }
 
-func copyIncompressible(src, dst []byte) (int, error) {
-	lLen, dn := len(src), len(dst)
+// func copyIncompressible(src, dst []byte) (int, error) {
+// 	lLen, dn := len(src), len(dst)
 
-	di := 0
-	if lLen < 0xF {
-		dst[di] = byte(lLen << 4)
-	} else {
-		dst[di] = 0xF0
-		if di++; di == dn {
-			return di, lz4.ErrShortBuffer
-		}
-		lLen -= 0xF
-		for ; lLen >= 0xFF; lLen -= 0xFF {
-			dst[di] = 0xFF
-			if di++; di == dn {
-				return di, lz4.ErrShortBuffer
-			}
-		}
-		dst[di] = byte(lLen)
-	}
-	if di++; di+len(src) > dn {
-		return di, lz4.ErrShortBuffer
-	}
-	di += copy(dst[di:], src)
-	return di, nil
-}
+// 	di := 0
+// 	if lLen < 0xF {
+// 		dst[di] = byte(lLen << 4)
+// 	} else {
+// 		dst[di] = 0xF0
+// 		if di++; di == dn {
+// 			return di, lz4.ErrShortBuffer
+// 		}
+// 		lLen -= 0xF
+// 		for ; lLen >= 0xFF; lLen -= 0xFF {
+// 			dst[di] = 0xFF
+// 			if di++; di == dn {
+// 				return di, lz4.ErrShortBuffer
+// 			}
+// 		}
+// 		dst[di] = byte(lLen)
+// 	}
+// 	if di++; di+len(src) > dn {
+// 		return di, lz4.ErrShortBuffer
+// 	}
+// 	di += copy(dst[di:], src)
+// 	return di, nil
+// }
 
 // PutLogs put logs into logstore.
 // The callers should transform user logs into LogGroup.
-func (s *LogStore) PutLogs(lg *LogGroup) (err error) {
-	if len(lg.Logs) == 0 {
-		// empty log group
-		return nil
-	}
+// func (s *LogStore) PutLogs(lg *LogGroup) (err error) {
+// 	if len(lg.Logs) == 0 {
+// 		// empty log group
+// 		return nil
+// 	}
 
-	body, err := proto.Marshal(lg)
-	if err != nil {
-		return NewClientError(err.Error())
-	}
+// 	body, err := proto.Marshal(lg)
+// 	if err != nil {
+// 		return NewClientError(err.Error())
+// 	}
 
-	var out []byte
-	var h map[string]string
-	var outLen int
-	switch s.putLogCompressType {
-	case Compress_LZ4:
-		// Compresse body with lz4
-		out = make([]byte, lz4.CompressBlockBound(len(body)))
-		n, err := lz4.CompressBlock(body, out, 0)
-		if err != nil {
-			return NewClientError(err.Error())
-		}
-		// copy incompressible data as lz4 format
-		if n == 0 {
-			n, _ = copyIncompressible(body, out)
-		}
+// 	var out []byte
+// 	var h map[string]string
+// 	var outLen int
+// 	switch s.putLogCompressType {
+// 	case Compress_LZ4:
+// 		// Compresse body with lz4
+// 		out = make([]byte, lz4.CompressBlockBound(len(body)))
+// 		n, err := lz4.CompressBlock(body, out, 0)
+// 		if err != nil {
+// 			return NewClientError(err.Error())
+// 		}
+// 		// copy incompressible data as lz4 format
+// 		if n == 0 {
+// 			n, _ = copyIncompressible(body, out)
+// 		}
 
-		h = map[string]string{
-			"x-log-compresstype": "lz4",
-			"x-log-bodyrawsize":  strconv.Itoa(len(body)),
-			"Content-Type":       "application/x-protobuf",
-		}
-		outLen = n
-		break
-	case Compress_None:
-		// no compress
-		out = body
-		h = map[string]string{
-			"x-log-bodyrawsize": strconv.Itoa(len(body)),
-			"Content-Type":      "application/x-protobuf",
-		}
-		outLen = len(out)
-	}
+// 		h = map[string]string{
+// 			"x-log-compresstype": "lz4",
+// 			"x-log-bodyrawsize":  strconv.Itoa(len(body)),
+// 			"Content-Type":       "application/x-protobuf",
+// 		}
+// 		outLen = n
+// 		break
+// 	case Compress_None:
+// 		// no compress
+// 		out = body
+// 		h = map[string]string{
+// 			"x-log-bodyrawsize": strconv.Itoa(len(body)),
+// 			"Content-Type":      "application/x-protobuf",
+// 		}
+// 		outLen = len(out)
+// 	}
 
-	uri := fmt.Sprintf("/logstores/%v", s.Name)
-	r, err := request(s.project, "POST", uri, h, out[:outLen])
-	if err != nil {
-		return NewClientError(err.Error())
-	}
-	defer r.Body.Close()
-	body, _ = ioutil.ReadAll(r.Body)
-	if r.StatusCode != http.StatusOK {
-		err := new(Error)
-		json.Unmarshal(body, err)
-		return err
-	}
-	return nil
-}
+// 	uri := fmt.Sprintf("/logstores/%v", s.Name)
+// 	r, err := request(s.project, "POST", uri, h, out[:outLen])
+// 	if err != nil {
+// 		return NewClientError(err.Error())
+// 	}
+// 	defer r.Body.Close()
+// 	body, _ = ioutil.ReadAll(r.Body)
+// 	if r.StatusCode != http.StatusOK {
+// 		err := new(Error)
+// 		json.Unmarshal(body, err)
+// 		return err
+// 	}
+// 	return nil
+// }
 
 // GetCursor gets log cursor of one shard specified by shardId.
 // The from can be in three form: a) unix timestamp in seccond, b) "begin", c) "end".
@@ -390,7 +391,7 @@ func (s *LogStore) GetLogsBytes(shardID int, cursor, endCursor string,
 	out = make([]byte, bodyRawSize)
 	if bodyRawSize != 0 {
 		len := 0
-		if len, err = lz4.UncompressBlock(buf, out, 0); err != nil || len != bodyRawSize {
+		if len, err = lz4.UncompressBlock(buf, out); err != nil || len != bodyRawSize {
 			return
 		}
 	}

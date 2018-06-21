@@ -1,8 +1,9 @@
 package consumer
 
 import (
-	"github.com/bailaohe/aliyun-log-go-sdk"
 	"log"
+
+	"github.com/misty44/aliyun-log-go-sdk"
 )
 
 type Task func() TaskResult

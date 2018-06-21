@@ -2,7 +2,8 @@ package consumer
 
 import (
 	"time"
-	"github.com/bailaohe/aliyun-log-go-sdk"
+
+	"github.com/misty44/aliyun-log-go-sdk"
 )
 
 type CheckpointTracker struct {
@@ -20,7 +21,7 @@ type CheckpointTracker struct {
 
 const defaultFlushCheckpointInterval time.Duration = 60
 
-func (t *CheckpointTracker) saveCheckpoint(persistent bool, cursor string) {
+func (t *CheckpointTracker) SaveCheckpoint(persistent bool, cursor string) {
 	if len(cursor) > 0 {
 		t.CachedCheckpoint = cursor
 	} else {
