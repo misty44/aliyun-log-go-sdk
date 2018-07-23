@@ -123,8 +123,10 @@ func (s *LogStore) HeartBeat(consumerGroup string, consumer string, heartBeatSha
 		json.Unmarshal(buf, err)
 		return nil, err
 	}
+
 	var aStr []int
 	json.Unmarshal(buf, &aStr)
+	// var aStr [2]int = [2]int{9, 10}
 	for _, v := range aStr {
 		shardIDs = append(shardIDs, v)
 	}

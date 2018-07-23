@@ -1,9 +1,8 @@
 package consumer
 
 import (
-	"log"
-
 	"github.com/misty44/aliyun-log-go-sdk"
+	"github.com/sirupsen/logrus"
 )
 
 type Task func() TaskResult
@@ -65,7 +64,7 @@ func (self *FetchTaskResult) handle(context *ShardedConsumerWorker) {
 	}
 	context.NextCursor = self.Cursor
 	context.LastFetchedCount = len(self.FetchedLogGroups.LogGroups)
-	log.Printf("Fetched, count = %v", context.LastFetchedCount)
+	logrus.Printf("Fetched, count = %v", context.LastFetchedCount)
 }
 
 type ShutdownTaskResult struct {

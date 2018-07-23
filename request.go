@@ -60,6 +60,7 @@ func request(project *LogProject, method, uri string, headers map[string]string,
 	}
 	urlStr += project.Name + "." + project.Endpoint + uri
 	req, err := http.NewRequest(method, urlStr, reader)
+
 	if err != nil {
 		return nil, err
 	}

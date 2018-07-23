@@ -8,7 +8,7 @@ import (
 )
 
 // GlobalForceUsingHTTP if GlobalForceUsingHTTP is true, then all request will use HTTP(ignore LogProject's UsingHTTP flag)
-var GlobalForceUsingHTTP = false
+var GlobalForceUsingHTTP = true
 
 // LogProject defines log project
 type LogProject struct {

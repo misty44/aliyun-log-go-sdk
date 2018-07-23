@@ -264,7 +264,7 @@ func NewConsumerWorker(logStore *sls.LogStore, processor ConsumerProcessor, conf
 		holdShards:     make([]int, 0),
 	}
 
-	err := logStore.CreateConsumerGroup(config.ConsumerGroup, config.HeartbeatInterval*2, true)
+	err := logStore.CreateConsumerGroup(config.ConsumerGroup, config.HeartbeatInterval*2, false)
 	if err != nil {
 		nErr := &sls.Error{}
 		inErr := &sls.Error{}
@@ -366,6 +366,8 @@ func (self *ConsumerWorker) Startup() {
 			copiedShards := self.holdShards
 
 			for _, shard := range copiedShards {
+				logrus.Debugf("ConsumerWorker shard %s\n", shard)
+
 				shardedWorker := self.getShardedWorker(shard)
 				shardedWorker.consume()
 			}
